@@ -195,13 +195,55 @@ def family(update, context):
     context.user_data["family_history"] = value
     context.user_data["result"] = 0
 
-    # Save patient data
-    requests.post(ADD_PATIENT_URL, json=context.user_data)
+    # 1️⃣ Save patient data (fast)
+    save_resp = requests.post(
+        ADD_PATIENT_URL,
+        json=context.user_data,
+        timeout=3
+    )
 
-    # Get prediction
-    prediction = requests.post(PREDICT_URL, json=context.user_data).json()
+    if save_resp.status_code != 200:
+        update.message.reply_text(
+            "⚠️ Server error while saving your data.\n"
+            "Please try again later."
+        )
+        return ConversationHandler.END
 
-    # Final conclusion
+    # 👉 IMPORTANT: immediate reply to avoid webhook timeout
+    update.message.reply_text("⏳ Analyzing your heart health...")
+
+    # 2️⃣ Predict safely (timeout protected)
+    try:
+        pred_resp = requests.post(
+            PREDICT_URL,
+            json=context.user_data,
+            timeout=3
+        )
+
+        if pred_resp.status_code != 200:
+            update.message.reply_text(
+                "⚠️ Prediction service is temporarily unavailable.\n"
+                "Your data has been saved successfully."
+            )
+            return ConversationHandler.END
+
+        prediction = pred_resp.json()
+
+    except requests.exceptions.Timeout:
+        update.message.reply_text(
+            "⚠️ Prediction is taking longer than expected.\n"
+            "Your data has been saved successfully."
+        )
+        return ConversationHandler.END
+
+    except Exception:
+        update.message.reply_text(
+            "⚠️ Unexpected error during analysis.\n"
+            "Please try again later."
+        )
+        return ConversationHandler.END
+
+    # 3️⃣ Final conclusion
     if prediction["risk"] == "HIGH":
         conclusion = (
             "🔴 *High Cardiac Risk Detected*\n\n"
@@ -225,6 +267,7 @@ def family(update, context):
 
     context.user_data.clear()
     return ConversationHandler.END
+
 
 # ---------------- HANDLER ----------------
 conv = ConversationHandler(
