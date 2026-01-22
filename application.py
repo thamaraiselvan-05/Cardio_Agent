@@ -14,7 +14,6 @@ from bot_webhook import telegram_webhook
 
 app = Flask(__name__)
 app.register_blueprint(telegram_webhook)
-ensure_table()
 
 # ---------------- DATABASE CONFIG ----------------
 DATABASE_URL = os.environ.get("DATABASE_URL")
