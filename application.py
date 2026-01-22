@@ -6,23 +6,29 @@ import psycopg2
 import pandas as pd
 import joblib
 import os
+import traceback
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+
 from bot_webhook import telegram_webhook
 
+
+# ---------------- APP INIT ----------------
 app = Flask(__name__)
 app.register_blueprint(telegram_webhook)
 
-# ---------------- DATABASE CONFIG ----------------
+
+# ---------------- CONFIG ----------------
 DATABASE_URL = os.environ.get("DATABASE_URL")
 MODEL_PATH = "heart_model.pkl"
-# print("DATABASE_URL =", os.environ.get("DATABASE_URL"))
+
 
 # ---------------- DB CONNECTION ----------------
 def get_db_connection():
-    return psycopg2.connect(DATABASE_URL,sslmode="require")
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
+
 
 def ensure_table():
     conn = get_db_connection()
@@ -40,29 +46,32 @@ def ensure_table():
             result INT
         );
     """)
-
     conn.commit()
     conn.close()
+
+
 ensure_table()
-# ---------------- TRAIN ML MODEL ----------------
-# ---------------- TRAIN ML MODEL ----------------
+
+
+# ---------------- FALLBACK MODEL ----------------
 def create_default_model():
     """
-    Fallback model to avoid webhook failure
+    Safe fallback model to avoid prediction failures
     """
-    model = LogisticRegression()
+    model = LogisticRegression(max_iter=1000)
     X = [
         [30, 120, 180, 90, 70],
-        [55, 150, 240, 130, 90]
+        [45, 140, 220, 110, 85],
+        [60, 160, 260, 140, 95]
     ]
-    y = [0, 1]
+    y = [0, 1, 1]
     model.fit(X, y)
     return model
 
 
+# ---------------- TRAIN MODEL ----------------
 def train_model():
     conn = get_db_connection()
-
     query = """
         SELECT age, blood_pressure, cholesterol,
                blood_sugar, heart_rate, result
@@ -71,9 +80,12 @@ def train_model():
     df = pd.read_sql(query, conn)
     conn.close()
 
+    # 🛟 Safety: Not enough data
     if len(df) < 5:
-        print("⚠️ Not enough data, using fallback ML model")
-        return create_default_model()
+        print("⚠️ Not enough data — using fallback ML model")
+        model = create_default_model()
+        joblib.dump(model, MODEL_PATH)
+        return model
 
     X = df.drop("result", axis=1)
     y = df["result"]
@@ -91,33 +103,33 @@ def train_model():
     joblib.dump(model, MODEL_PATH)
     return model
 
-# ---------------- LOAD MODEL AT STARTUP ----------------
-print("🔄 Loading or training ML model at startup...")
+
+# ---------------- LOAD MODEL ----------------
+print("🔄 Loading ML model...")
 
 if os.path.exists(MODEL_PATH):
     model = joblib.load(MODEL_PATH)
     print("✅ ML model loaded from disk")
 else:
     model = train_model()
-    print("✅ ML model ready")
+    print("✅ ML model trained & ready")
 
 
-# ---------------- HOME PAGE (HTML + BOT LINK) ----------------
+# ---------------- HOME PAGE ----------------
 @app.route("/")
 def home():
-    bot_username = "CardioGaurdAi_bot"  # exact bot username
-    bot_link = f"https://t.me/@CardioGaurdAi_bot"
-    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://t.me/CardioGaurdAi_bot"
+    bot_username = "CardioGaurdAi_bot"
+    bot_link = f"https://t.me/{bot_username}"
+    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={bot_link}"
 
     return render_template_string("""
-    <!DOCTYPE html>
     <html>
     <head>
         <title>CardioGuard AI</title>
         <style>
             body {
-                font-family: Arial, sans-serif;
-                background: #f4f6f8;
+                font-family: Arial;
+                background: linear-gradient(135deg, #ffebee, #e3f2fd);
                 display: flex;
                 justify-content: center;
                 align-items: center;
@@ -126,141 +138,66 @@ def home():
             .card {
                 background: white;
                 padding: 40px;
-                border-radius: 12px;
+                border-radius: 16px;
                 text-align: center;
-                box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+                box-shadow: 0 10px 30px rgba(0,0,0,0.15);
                 max-width: 480px;
             }
-            h1 {
-                color: #d32f2f;
-            }
-            p {
-                font-size: 16px;
-                color: #333;
-            }
+            h1 { color: #d32f2f; }
             .btn {
-                display: inline-block;
-                margin-top: 20px;
-                padding: 12px 25px;
                 background: #0088cc;
                 color: white;
-                text-decoration: none;
-                border-radius: 6px;
-                font-size: 16px;
-            }
-            .btn:hover {
-                background: #006fa3;
-            }
-            img {
-                margin-top: 15px;
+                padding: 12px 25px;
                 border-radius: 8px;
-            }
-            .footer {
+                text-decoration: none;
+                display: inline-block;
                 margin-top: 20px;
-                font-size: 13px;
-                color: gray;
             }
         </style>
     </head>
     <body>
         <div class="card">
             <h1>❤️ CardioGuard AI</h1>
-            <p>An AI-powered heart risk assessment system</p>
-
-            <p><strong>Chat with our Telegram Bot</strong></p>
-            <p>@{{ bot_username }}</p>
-
-            <img src="{{ qr_url }}" alt="Telegram Bot QR Code">
-
+            <p>AI-powered heart risk assessment</p>
+            <p><strong>@{{ bot_username }}</strong></p>
+            <img src="{{ qr_url }}">
             <br>
-            <a class="btn" href="{{ bot_link }}" target="_blank">
-                Start Telegram Bot
-            </a>
-
-            <div class="footer">
-                Backend & ML running successfully 🚀
-            </div>
+            <a class="btn" href="{{ bot_link }}" target="_blank">Start Telegram Bot</a>
+            <p style="margin-top:15px;font-size:13px;color:gray;">
+                Backend + ML running smoothly 🚀
+            </p>
         </div>
     </body>
     </html>
     """, bot_username=bot_username, bot_link=bot_link, qr_url=qr_url)
 
 
-# ---------------- TEST DB ----------------
-@app.route("/test-db")
-def test_db():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM patients;")
-    count = cur.fetchone()[0]
-    conn.close()
-    return jsonify({"patients_count": count})
-
-# ---------------- ADD PATIENT ----------------
-@app.route("/api/add-patient", methods=["POST"])
-def add_patient():
-    data = request.json
-    if not data:
-        return jsonify({"error": "Invalid or empty JSON body"}), 400
-    
-    # ✅ VALIDATION (ADD HERE)
-    required_fields = [
-        "age", "blood_pressure", "cholesterol",
-        "blood_sugar", "heart_rate",
-        "lifestyle", "family_history", "result"
-    ]
-
-    for field in required_fields:
-        if field not in data:
-            return jsonify({"error": f"Missing field: {field}"}), 400
-
-    # ---------------- DB INSERT ----------------
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        INSERT INTO patients (
-            age, blood_pressure, cholesterol, blood_sugar,
-            heart_rate, lifestyle, family_history, result
-        )
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-    """, (
-        data["age"],
-        data["blood_pressure"],
-        data["cholesterol"],
-        data["blood_sugar"],
-        data["heart_rate"],
-        data["lifestyle"],
-        data["family_history"],
-        data["result"]
-    ))
-
-    conn.commit()
-    conn.close()
-
-    return jsonify({"message": "Patient data added successfully"})
-
-
-# ---------------- ML PREDICTION ----------------
+# ---------------- PREDICTION API ----------------
 @app.route("/api/predict", methods=["POST"])
 def predict():
-    data = request.json
+    try:
+        data = request.json
 
-    features = [[
-        data["age"],
-        data["blood_pressure"],
-        data["cholesterol"],
-        data["blood_sugar"],
-        data["heart_rate"]
-    ]]
+        features = [[
+            int(data["age"]),
+            int(data["blood_pressure"]),
+            int(data["cholesterol"]),
+            int(data["blood_sugar"]),
+            int(data["heart_rate"])
+        ]]
 
-    prediction = model.predict(features)[0]
-    probability = model.predict_proba(features)[0][1]
+        prediction = model.predict(features)[0]
+        probability = model.predict_proba(features)[0][1]
 
-    return jsonify({
-        "risk": "HIGH" if prediction == 1 else "LOW",
-        "probability": round(probability, 2)
-    })
+        return jsonify({
+            "risk": "HIGH" if prediction == 1 else "LOW",
+            "probability": round(float(probability), 2)
+        })
+
+    except Exception as e:
+        print("❌ Prediction error:", e)
+        traceback.print_exc()
+        return jsonify({"error": "Prediction failed"}), 500
 
 
 # ---------------- START APP ----------------
