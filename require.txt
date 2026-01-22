@@ -1,9 +1,0 @@
-flask
-python-dotenv
-psycopg2-binary
-pandas
-scikit-learn
-joblib
-requests
-python-telegram-bot==13.15
-gunicorn
