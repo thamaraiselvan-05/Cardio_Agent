@@ -1,4 +1,5 @@
 import os
+import imghdr
 import re
 import requests
 from flask import Blueprint, request
