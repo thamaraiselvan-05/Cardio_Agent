@@ -42,7 +42,10 @@ def start(update, context):
     context.user_data.clear()
     update.message.reply_text(
         "🫀 *Welcome to CardioGuard AI*\n\n"
-        "Please enter your age (example: 22):",
+        "I will ask you a few simple health-related questions.\n"
+        "Please answer using numbers or the given options.\n\n"
+        "*Question 1️⃣*\n"
+        "👉 Enter your *age* (example: `22`):",
         parse_mode="Markdown"
     )
     return AGE
@@ -51,13 +54,23 @@ def start(update, context):
 def age(update, context):
     value = extract_number(update.message.text)
     if value is None or value < 1 or value > 120:
-        update.message.reply_text("❌ Please enter a valid age.")
+        update.message.reply_text(
+            "❌ Invalid age.\n\n"
+            "👉 Please enter age as a *number only*.\n"
+            "Example: `25`"
+        )
         return AGE
 
     context.user_data["age"] = value
     update.message.reply_text(
-        "Enter your blood pressure (example: 120/80 or 120).\n"
-        "⚠️ Only systolic value will be used."
+        "*Question 2️⃣*\n"
+        "👉 Enter your *blood pressure*.\n\n"
+        "Examples:\n"
+        "• `120/80`\n"
+        "• `130/85`\n"
+        "• `120`\n\n"
+        "⚠️ Only the *systolic value* will be used.",
+        parse_mode="Markdown"
     )
     return BP
 
@@ -65,79 +78,135 @@ def age(update, context):
 def bp(update, context):
     value = extract_systolic_bp(update.message.text)
     if value is None:
-        update.message.reply_text("❌ Invalid BP format.")
+        update.message.reply_text(
+            "❌ Invalid blood pressure format.\n\n"
+            "👉 Please enter like:\n"
+            "• `120/80`\n"
+            "• `130/85`\n"
+            "• `120`",
+            parse_mode="Markdown"
+        )
         return BP
 
     context.user_data["blood_pressure"] = value
-    update.message.reply_text("Enter cholesterol level:")
+    update.message.reply_text(
+        "*Question 3️⃣*\n"
+        "👉 Enter your *cholesterol level*.\n\n"
+        "Example: `180` (mg/dL)",
+        parse_mode="Markdown"
+    )
     return CHOL
 
-# ---------------- CHOL ----------------
+# ---------------- CHOLESTEROL ----------------
 def chol(update, context):
     value = extract_number(update.message.text)
     if value is None:
-        update.message.reply_text("❌ Enter numbers only.")
+        update.message.reply_text(
+            "❌ Invalid cholesterol value.\n\n"
+            "👉 Enter numbers only.\n"
+            "Example: `200`"
+        )
         return CHOL
 
     context.user_data["cholesterol"] = value
-    update.message.reply_text("Enter blood sugar:")
+    update.message.reply_text(
+        "*Question 4️⃣*\n"
+        "👉 Enter your *fasting blood sugar*.\n\n"
+        "Example: `90` (mg/dL)",
+        parse_mode="Markdown"
+    )
     return SUGAR
 
-# ---------------- SUGAR ----------------
+# ---------------- BLOOD SUGAR ----------------
 def sugar(update, context):
     value = extract_number(update.message.text)
     if value is None:
-        update.message.reply_text("❌ Enter numbers only.")
+        update.message.reply_text(
+            "❌ Invalid blood sugar value.\n\n"
+            "👉 Enter numbers only.\n"
+            "Example: `100`"
+        )
         return SUGAR
 
     context.user_data["blood_sugar"] = value
-    update.message.reply_text("Enter heart rate:")
+    update.message.reply_text(
+        "*Question 5️⃣*\n"
+        "👉 Enter your *resting heart rate*.\n\n"
+        "Example: `72` (beats per minute)",
+        parse_mode="Markdown"
+    )
     return HR
 
-# ---------------- HR ----------------
+# ---------------- HEART RATE ----------------
 def hr(update, context):
     value = extract_number(update.message.text)
     if value is None:
-        update.message.reply_text("❌ Enter numbers only.")
+        update.message.reply_text(
+            "❌ Invalid heart rate.\n\n"
+            "👉 Enter numbers only.\n"
+            "Example: `75`"
+        )
         return HR
 
     context.user_data["heart_rate"] = value
-    update.message.reply_text("Lifestyle? (sedentary / moderate / active)")
+    update.message.reply_text(
+        "*Question 6️⃣*\n"
+        "👉 Select your *physical activity level*.\n\n"
+        "Type one of these:\n"
+        "• `sedentary`\n"
+        "• `moderate`\n"
+        "• `active`",
+        parse_mode="Markdown"
+    )
     return LIFE
 
-# ---------------- LIFE ----------------
+# ---------------- LIFESTYLE ----------------
 def life(update, context):
     value = update.message.text.lower()
     if value not in ["sedentary", "moderate", "active"]:
-        update.message.reply_text("❌ Type sedentary, moderate or active.")
+        update.message.reply_text(
+            "❌ Invalid option.\n\n"
+            "👉 Please type exactly:\n"
+            "`sedentary`, `moderate`, or `active`"
+        )
         return LIFE
 
     context.user_data["lifestyle"] = value
-    update.message.reply_text("Family history of heart disease? (yes / no)")
+    update.message.reply_text(
+        "*Question 7️⃣ (Final)*\n"
+        "👉 Do you have a *family history of heart disease*?\n\n"
+        "Reply with:\n"
+        "• `yes`\n"
+        "• `no`",
+        parse_mode="Markdown"
+    )
     return FAMILY
 
 # ---------------- FINAL ----------------
 def family(update, context):
     value = update.message.text.lower()
     if value not in ["yes", "no"]:
-        update.message.reply_text("❌ Reply yes or no.")
+        update.message.reply_text(
+            "❌ Invalid response.\n\n"
+            "👉 Please reply with `yes` or `no`."
+        )
         return FAMILY
 
     context.user_data["family_history"] = value
     context.user_data["result"] = 0
 
-    # Save data
+    # Save patient data
     requests.post(ADD_PATIENT_URL, json=context.user_data)
 
-    # Predict
+    # Get prediction
     prediction = requests.post(PREDICT_URL, json=context.user_data).json()
 
-    # Conclusion
+    # Final conclusion
     if prediction["risk"] == "HIGH":
         conclusion = (
             "🔴 *High Cardiac Risk Detected*\n\n"
             "⚠️ You may require cardiac health support.\n"
-            "Please consult a cardiologist as soon as possible."
+            "Please consult a cardiologist."
         )
     else:
         conclusion = (
@@ -147,8 +216,8 @@ def family(update, context):
         )
 
     update.message.reply_text(
-        f"🫀 *Heart Risk Assessment*\n\n"
-        f"Risk: *{prediction['risk']}*\n"
+        f"🫀 *Heart Risk Assessment Result*\n\n"
+        f"Risk Level: *{prediction['risk']}*\n"
         f"Probability: *{prediction['probability']}*\n\n"
         f"{conclusion}",
         parse_mode="Markdown"

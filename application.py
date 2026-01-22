@@ -18,7 +18,7 @@ app.register_blueprint(telegram_webhook)
 # ---------------- DATABASE CONFIG ----------------
 DATABASE_URL = os.environ.get("DATABASE_URL")
 MODEL_PATH = "heart_model.pkl"
-print("DATABASE_URL =", os.environ.get("DATABASE_URL"))
+# print("DATABASE_URL =", os.environ.get("DATABASE_URL"))
 
 # ---------------- DB CONNECTION ----------------
 def get_db_connection():
@@ -40,9 +40,10 @@ def ensure_table():
             result INT
         );
     """)
+
     conn.commit()
     conn.close()
-
+ensure_table()
 # ---------------- TRAIN ML MODEL ----------------
 def train_model():
     conn = get_db_connection()
@@ -183,7 +184,21 @@ def test_db():
 @app.route("/api/add-patient", methods=["POST"])
 def add_patient():
     data = request.json
+    if not data:
+        return jsonify({"error": "Invalid or empty JSON body"}), 400
+    
+    # ✅ VALIDATION (ADD HERE)
+    required_fields = [
+        "age", "blood_pressure", "cholesterol",
+        "blood_sugar", "heart_rate",
+        "lifestyle", "family_history", "result"
+    ]
 
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"error": f"Missing field: {field}"}), 400
+
+    # ---------------- DB INSERT ----------------
     conn = get_db_connection()
     cur = conn.cursor()
 
@@ -209,6 +224,7 @@ def add_patient():
 
     return jsonify({"message": "Patient data added successfully"})
 
+
 # ---------------- ML PREDICTION ----------------
 @app.route("/api/predict", methods=["POST"])
 def predict():
@@ -216,6 +232,13 @@ def predict():
 
     if model is None:
         model = train_model()
+
+    if model is None:
+        return jsonify({
+            "risk": "LOW",
+            "probability": 0.50,
+            "message": "Insufficient data for ML training"
+        })
 
     data = request.json
 
@@ -234,6 +257,7 @@ def predict():
         "risk": "HIGH" if prediction == 1 else "LOW",
         "probability": round(probability, 2)
     })
+
 
 # ---------------- START APP ----------------
 if __name__ == "__main__":
