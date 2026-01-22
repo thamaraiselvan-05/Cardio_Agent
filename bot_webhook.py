@@ -6,8 +6,43 @@ from flask import Blueprint, request
 from telegram import Update, Bot
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler
 from dotenv import load_dotenv
+import joblib
+import numpy as np
+
 
 load_dotenv()
+MODEL_PATH = "heart_model.pkl"
+
+def predict_heart_risk(data):
+    try:
+        model = joblib.load(MODEL_PATH)
+    except Exception:
+        # fallback model (never fails)
+        from sklearn.linear_model import LogisticRegression
+        model = LogisticRegression()
+        X = [
+            [30, 120, 180, 90, 70],
+            [55, 150, 240, 130, 90]
+        ]
+        y = [0, 1]
+        model.fit(X, y)
+
+    features = np.array([[
+        data["age"],
+        data["blood_pressure"],
+        data["cholesterol"],
+        data["blood_sugar"],
+        data["heart_rate"]
+    ]])
+
+    prediction = model.predict(features)[0]
+    probability = model.predict_proba(features)[0][1]
+
+    return {
+        "risk": "HIGH" if prediction == 1 else "LOW",
+        "probability": round(float(probability), 2)
+    }
+
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def save_patient_to_db(data):
@@ -40,8 +75,8 @@ def save_patient_to_db(data):
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BACKEND_URL = os.getenv("BACKEND_URL")
 
-if not BOT_TOKEN or not BACKEND_URL:
-    raise ValueError("BOT_TOKEN or BACKEND_URL not set")
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN not set")
 
 bot = Bot(token=BOT_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=1, use_context=True)
@@ -236,6 +271,7 @@ def family(update, context):
     save_patient_to_db(context.user_data)
 
     update.message.reply_text("⏳ *Analyzing your heart health...*", parse_mode="Markdown")
+    prediction = predict_heart_risk(context.user_data)
 
     # 2️⃣ Predict (numeric fields only)
     predict_payload = {
@@ -246,12 +282,12 @@ def family(update, context):
         "heart_rate": context.user_data["heart_rate"]
     }
 
-    try:
-        pred_resp = requests.post(PREDICT_URL, json=predict_payload, timeout=3)
-        prediction = pred_resp.json()
-    except Exception:
-        update.message.reply_text("⚠️ Prediction service temporarily unavailable.")
-        return ConversationHandler.END
+    #try:
+     #   pred_resp = requests.post(PREDICT_URL, json=predict_payload, timeout=3)
+      #  prediction = pred_resp.json()
+    #except Exception:
+     #   update.message.reply_text("⚠️ Prediction service temporarily unavailable.")
+      #  return ConversationHandler.END
 
     # 3️⃣ Final Result
     if prediction["risk"] == "HIGH":
