@@ -1,12 +1,39 @@
 import os
 import re
 import requests
+import psycopg2
 from flask import Blueprint, request
 from telegram import Update, Bot
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler
 from dotenv import load_dotenv
 
 load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+def save_patient_to_db(data):
+    try:
+        conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO patients (
+                age, blood_pressure, cholesterol, blood_sugar,
+                heart_rate, lifestyle, family_history, result
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (
+            data["age"],
+            data["blood_pressure"],
+            data["cholesterol"],
+            data["blood_sugar"],
+            data["heart_rate"],
+            data["lifestyle"],
+            data["family_history"],
+            data["result"]
+        ))
+        conn.commit()
+        conn.close()
+        print("✅ Patient saved to DB")
+    except Exception as e:
+        print("❌ DB save failed:", e)
 
 
 # ---------------- ENV ----------------
@@ -205,7 +232,8 @@ def family(update, context):
     context.user_data["result"] = 0
 
     # 1️⃣ Save patient data
-    requests.post(ADD_PATIENT_URL, json=context.user_data, timeout=3)
+   # requests.post(ADD_PATIENT_URL, json=context.user_data, timeout=3)
+    save_patient_to_db(context.user_data)
 
     update.message.reply_text("⏳ *Analyzing your heart health...*", parse_mode="Markdown")
 

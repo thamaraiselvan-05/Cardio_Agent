@@ -52,6 +52,26 @@ def ensure_table():
 
 ensure_table()
 
+# ---------------- TEST DB CONNECTION ----------------
+@app.route("/test-db")
+def test_db():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM patients;")
+        count = cur.fetchone()[0]
+        conn.close()
+
+        return {
+            "status": "connected",
+            "patients_count": count
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }, 500
 
 # ---------------- FALLBACK MODEL ----------------
 def create_default_model():
