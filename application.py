@@ -14,6 +14,7 @@ from bot_webhook import telegram_webhook
 
 app = Flask(__name__)
 app.register_blueprint(telegram_webhook)
+ensure_table()
 
 # ---------------- DATABASE CONFIG ----------------
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -23,6 +24,25 @@ print("DATABASE_URL =", os.environ.get("DATABASE_URL"))
 # ---------------- DB CONNECTION ----------------
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL,sslmode="require")
+
+def ensure_table():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS patients (
+            id SERIAL PRIMARY KEY,
+            age INT,
+            blood_pressure INT,
+            cholesterol INT,
+            blood_sugar INT,
+            heart_rate INT,
+            lifestyle TEXT,
+            family_history TEXT,
+            result INT
+        );
+    """)
+    conn.commit()
+    conn.close()
 
 # ---------------- TRAIN ML MODEL ----------------
 def train_model():
@@ -220,29 +240,3 @@ def predict():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-@app.route("/health")
-def health():
-    return "OK", 200
-def ensure_table():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS patients (
-            id SERIAL PRIMARY KEY,
-            age INT,
-            blood_pressure INT,
-            cholesterol INT,
-            blood_sugar INT,
-            heart_rate INT,
-            lifestyle TEXT,
-            family_history TEXT,
-            result INT
-        );
-    """)
-    conn.commit()
-    conn.close()
-app = Flask(__name__)
-app.register_blueprint(telegram_webhook)
-
-ensure_table()
