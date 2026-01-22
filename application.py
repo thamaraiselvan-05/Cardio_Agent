@@ -224,3 +224,25 @@ if __name__ == "__main__":
 @app.route("/health")
 def health():
     return "OK", 200
+def ensure_table():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS patients (
+            id SERIAL PRIMARY KEY,
+            age INT,
+            blood_pressure INT,
+            cholesterol INT,
+            blood_sugar INT,
+            heart_rate INT,
+            lifestyle TEXT,
+            family_history TEXT,
+            result INT
+        );
+    """)
+    conn.commit()
+    conn.close()
+app = Flask(__name__)
+app.register_blueprint(telegram_webhook)
+
+ensure_table()
