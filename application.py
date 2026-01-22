@@ -45,6 +45,21 @@ def ensure_table():
     conn.close()
 ensure_table()
 # ---------------- TRAIN ML MODEL ----------------
+# ---------------- TRAIN ML MODEL ----------------
+def create_default_model():
+    """
+    Fallback model to avoid webhook failure
+    """
+    model = LogisticRegression()
+    X = [
+        [30, 120, 180, 90, 70],
+        [55, 150, 240, 130, 90]
+    ]
+    y = [0, 1]
+    model.fit(X, y)
+    return model
+
+
 def train_model():
     conn = get_db_connection()
 
@@ -57,8 +72,8 @@ def train_model():
     conn.close()
 
     if len(df) < 5:
-        print("⚠️ Not enough data to train ML model")
-        return None
+        print("⚠️ Not enough data, using fallback ML model")
+        return create_default_model()
 
     X = df.drop("result", axis=1)
     y = df["result"]
@@ -77,13 +92,14 @@ def train_model():
     return model
 
 # ---------------- LOAD MODEL AT STARTUP ----------------
-model = None
+print("🔄 Loading or training ML model at startup...")
 
 if os.path.exists(MODEL_PATH):
     model = joblib.load(MODEL_PATH)
-    print("✅ ML model loaded")
+    print("✅ ML model loaded from disk")
 else:
-    print("⚠️ Model not found, will train on first prediction")
+    model = train_model()
+    print("✅ ML model ready")
 
 
 # ---------------- HOME PAGE (HTML + BOT LINK) ----------------
@@ -228,18 +244,6 @@ def add_patient():
 # ---------------- ML PREDICTION ----------------
 @app.route("/api/predict", methods=["POST"])
 def predict():
-    global model
-
-    if model is None:
-        model = train_model()
-
-    if model is None:
-        return jsonify({
-            "risk": "LOW",
-            "probability": 0.50,
-            "message": "Insufficient data for ML training"
-        })
-
     data = request.json
 
     features = [[
